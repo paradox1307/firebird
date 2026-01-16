@@ -40,6 +40,7 @@
 #include "../dsql/ExprNodes.h"
 #include "../jrd/RecordSourceNodes.h"
 #include "../jrd/exe.h"
+#include "../jrd/Statement.h"
 #include "../jrd/recsrc/RecordSource.h"
 
 namespace Jrd {
@@ -478,6 +479,7 @@ public:
 	void compileRelation(StreamType stream);
 	unsigned decomposeBoolean(BoolExprNode* boolNode, BoolExprNodeStack& stack);
 	void generateAggregateDistincts(MapNode* map);
+	void generateAggregateSort(AggNode* aggNode);
 	RecordSource* generateRetrieval(StreamType stream,
 									SortNode** sortClause,
 									bool outerFlag,
@@ -764,7 +766,7 @@ private:
 	const bool innerFlag;
 	const bool outerFlag;
 	SortNode* const sort;
-	jrd_rel* relation;
+	Rsc::Rel relation;
 	const bool createIndexScanNodes;
 	const bool setConjunctionsMatched;
 	Firebird::string alias;

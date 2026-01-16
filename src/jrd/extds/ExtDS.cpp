@@ -535,6 +535,7 @@ void Provider::releaseConnection(thread_db* tdbb, Connection& conn, bool inPool)
 				}
 			}
 		}
+		status->init();
 	}
 
 	if (inPool)
@@ -886,8 +887,7 @@ bool Connection::getWrapErrors(const ISC_STATUS* status) noexcept
 /// ConnectionsPool
 
 ConnectionsPool::ConnectionsPool(MemoryPool& pool)
-	: m_pool(pool),
-	  m_idleArray(pool),
+	: m_idleArray(pool),
 	  m_idleList(NULL),
 	  m_activeList(NULL),
 	  m_allCount(0),
@@ -2352,12 +2352,7 @@ void Statement::doSetInParams(thread_db* tdbb, unsigned int count, const MetaStr
 			paramDescs.put(*jrdVar, src);
 
 			if (src)
-			{
-				if (request->req_flags & req_null)
-					src->setNull();
-				else
-					src->clearNull();
-			}
+				src->clearNull();
 		}
 
 		const bool srcNull = !src || src->isNull();
@@ -2440,7 +2435,7 @@ void Statement::getOutParams(thread_db* tdbb, const ValueListNode* params)
 		}
 
 		// and assign to the target
-		EXE_assignment(tdbb, *jrdVar, local, srcNull, NULL, NULL);
+		EXE_assignment(tdbb, *jrdVar, (srcNull ? nullptr : local), nullptr, nullptr);
 	}
 }
 

@@ -39,6 +39,7 @@
 #include "../mov_proto.h"
 #include "../PreparedStatement.h"
 #include "../Function.h"
+#include "../Statement.h"
 
 #include "InternalDS.h"
 #include "ValidatePassword.h"
@@ -228,8 +229,6 @@ bool InternalConnection::cancelExecution(bool /*forced*/)
 
 bool InternalConnection::resetSession(thread_db* tdbb)
 {
-	fb_assert(isCurrent());
-
 	if (isCurrent())
 		return true;
 

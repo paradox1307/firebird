@@ -110,7 +110,7 @@ BOOST_AUTO_TEST_CASE(LockUnlockWaitTest)
 			for (unsigned i = 0; i < ITERATION_COUNT; ++i)
 			{
 				const auto lockId = lockManager->enqueue(callbacks, &statusVector, 0,
-					LCK_expression, LOCK_KEY, sizeof(LOCK_KEY), LCK_EX, nullptr, nullptr, 0, LCK_WAIT, ownerHandle);
+					LCK_tra, LOCK_KEY, sizeof(LOCK_KEY), LCK_EX, nullptr, nullptr, 0, LCK_WAIT, ownerHandle);
 
 				if (lockId)
 				{
@@ -168,7 +168,7 @@ BOOST_AUTO_TEST_CASE(LockUnlockNoWaitTest)
 			for (unsigned i = 0; i < ITERATION_COUNT; ++i)
 			{
 				const auto lockId = lockManager->enqueue(callbacks, &statusVector, 0,
-					LCK_expression, LOCK_KEY, sizeof(LOCK_KEY), LCK_EX, nullptr, nullptr, 0, LCK_NO_WAIT, ownerHandle);
+					LCK_tra, LOCK_KEY, sizeof(LOCK_KEY), LCK_EX, nullptr, nullptr, 0, LCK_NO_WAIT, ownerHandle);
 
 				if (lockId)
 				{
@@ -196,19 +196,19 @@ BOOST_AUTO_TEST_CASE(LockUnlockNoWaitTest)
 
 BOOST_AUTO_TEST_CASE(LockUnlockAstTest)
 {
-	struct Lock;
+	struct LocalLock;
 
 	struct ThreadData
 	{
 		std::thread::id threadId;
 		LockManager* lockManager = nullptr;
 		std::mutex localMutex;
-		std::unordered_map<SLONG, std::unique_ptr<Lock>> locks;
+		std::unordered_map<SLONG, std::unique_ptr<LocalLock>> locks;
 		SLONG ownerHandle = 0;
 		bool shutdown = false;
 	};
 
-	struct Lock
+	struct LocalLock
 	{
 		ThreadData* threadData = nullptr;
 		unsigned key = 0;
@@ -232,7 +232,7 @@ BOOST_AUTO_TEST_CASE(LockUnlockAstTest)
 	std::latch latch(THREAD_COUNT);
 
 	static const auto ast = [](void* astArg) -> int {
-		const auto lock = static_cast<Lock*>(astArg);
+		const auto lock = static_cast<LocalLock*>(astArg);
 		const auto threadData = lock->threadData;
 
 		std::lock_guard localMutexGuard(threadData->localMutex);
@@ -273,14 +273,14 @@ BOOST_AUTO_TEST_CASE(LockUnlockAstTest)
 
 			for (unsigned i = 0; i < ITERATION_COUNT; ++i)
 			{
-				auto lock = std::make_unique<Lock>();
+				auto lock = std::make_unique<LocalLock>();
 				lock->threadData = &threadData;
 				lock->key = i;
 
 				std::lock_guard localMutexGuard(threadData.localMutex);
 
 				const auto lockId = lockManager->enqueue(callbacks, &statusVector, 0,
-					LCK_expression, (const UCHAR*) &lock->key, sizeof(lock->key), LCK_EX,
+					LCK_tra, (const UCHAR*) &lock->key, sizeof(lock->key), LCK_EX,
 					ast, lock.get(), 0, LCK_WAIT, threadData.ownerHandle);
 
 				if (lockId)

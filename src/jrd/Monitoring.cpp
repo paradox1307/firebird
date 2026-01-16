@@ -36,7 +36,7 @@
 #include "../common/isc_f_proto.h"
 #include "../common/isc_s_proto.h"
 #include "../common/db_alias.h"
-#include "../jrd/lck_proto.h"
+#include "../jrd/lck.h"
 #include "../jrd/met_proto.h"
 #include "../jrd/mov_proto.h"
 #include "../jrd/pag_proto.h"
@@ -46,6 +46,8 @@
 #include "../jrd/RecordBuffer.h"
 #include "../jrd/Monitoring.h"
 #include "../jrd/Function.h"
+#include "../jrd/met.h"
+#include "../jrd/Statement.h"
 #include "../jrd/optimizer/Optimizer.h"
 #include <numeric>
 
@@ -107,7 +109,7 @@ namespace
 } // namespace
 
 
-const Format* MonitoringTableScan::getFormat(thread_db* tdbb, jrd_rel* relation) const
+const Format* MonitoringTableScan::getFormat(thread_db* tdbb, RelationPermanent* relation) const
 {
 	const auto* const snapshot = MonitoringSnapshot::create(tdbb);
 	return snapshot->getData(relation)->getFormat();
@@ -118,12 +120,12 @@ bool MonitoringTableScan::retrieveRecord(thread_db* tdbb, jrd_rel* relation,
 										 FB_UINT64 position, Record* record) const
 {
 	const auto* const snapshot = MonitoringSnapshot::create(tdbb);
-	if (!snapshot->getData(relation)->fetch(position, record))
+	if (!snapshot->getData(getPermanent(relation))->fetch(position, record))
 		return false;
 
-	if (relation->rel_id == rel_mon_attachments || relation->rel_id == rel_mon_statements)
+	if (relation->getId() == rel_mon_attachments || relation->getId() == rel_mon_statements)
 	{
-		const USHORT fieldId = (relation->rel_id == rel_mon_attachments) ?
+		const USHORT fieldId = (relation->getId() == rel_mon_attachments) ?
 			(USHORT) f_mon_att_idle_timer : (USHORT) f_mon_stmt_timer;
 
 		dsc desc;
@@ -135,7 +137,7 @@ bool MonitoringTableScan::retrieveRecord(thread_db* tdbb, jrd_rel* relation,
 			ISC_TIMESTAMP_TZ* ts = reinterpret_cast<ISC_TIMESTAMP_TZ*> (desc.dsc_address);
 			ts->utc_timestamp = TimeZoneUtil::getCurrentGmtTimeStamp().utc_timestamp;
 
-			if (relation->rel_id == rel_mon_attachments)
+			if (relation->getId() == rel_mon_attachments)
 			{
 				const SINT64 currClock = fb_utils::query_performance_counter() / fb_utils::query_performance_frequency();
 				NoThrowTimeStamp::add10msec(&ts->utc_timestamp, clock - currClock, ISC_TIME_SECONDS_PRECISION);
@@ -702,11 +704,11 @@ void SnapshotData::clearSnapshot() noexcept
 }
 
 
-RecordBuffer* SnapshotData::getData(const jrd_rel* relation) const noexcept
+RecordBuffer* SnapshotData::getData(const RelationPermanent* relation) const noexcept
 {
 	fb_assert(relation);
 
-	return getData(relation->rel_id);
+	return getData(relation->getId());
 }
 
 
@@ -724,16 +726,15 @@ RecordBuffer* SnapshotData::getData(int id) const noexcept
 
 RecordBuffer* SnapshotData::allocBuffer(thread_db* tdbb, MemoryPool& pool, int rel_id)
 {
-	jrd_rel* const relation = MET_lookup_relation_id(tdbb, rel_id, false);
+	jrd_rel* relation = MetadataCache::lookup_relation_id(tdbb, rel_id, 0);
 	fb_assert(relation);
-	MET_scan_relation(tdbb, relation);
 	fb_assert(relation->isVirtual());
 
-	const Format* const format = MET_current(tdbb, relation);
+	const Format* const format = relation->currentFormat(tdbb);
 	fb_assert(format);
 
 	RecordBuffer* const buffer = FB_NEW_POOL(pool) RecordBuffer(pool, format);
-	const RelationData data = {relation->rel_id, buffer};
+	const RelationData data = {relation->getId(), buffer};
 	m_snapshot.add(data);
 
 	return buffer;
@@ -784,7 +785,7 @@ void SnapshotData::putField(thread_db* tdbb, Record* record, const DumpField& fi
 		SLONG rel_id;
 		memcpy(&rel_id, field.data, field.length);
 
-		const jrd_rel* const relation = MET_lookup_relation_id(tdbb, rel_id, false);
+		RelationPermanent* relation = MetadataCache::lookupRelation(tdbb, rel_id, 0);
 		if (!relation || relation->rel_name.object.isEmpty())
 			return;
 
@@ -1451,36 +1452,39 @@ void Monitoring::putStatistics(SnapshotData::DumpRecord& record, const RuntimeSt
 
 	// logical I/O statistics (table wise)
 
-	for (auto iter(statistics.getRelCounters()); iter; ++iter)
+	for (const auto& counts : statistics.getTableCounters())
 	{
+		if (counts.isEmpty())
+			continue;
+
 		const auto rec_stat_id = getGlobalId(fb_utils::genUniqueId());
 
 		record.reset(rel_mon_tab_stats);
 		record.storeGlobalId(f_mon_tab_stat_id, id);
 		record.storeInteger(f_mon_tab_stat_group, stat_group);
-		record.storeTableIdSchemaName(f_mon_tab_sch_name, (*iter).getRelationId());
-		record.storeTableIdObjectName(f_mon_tab_name, (*iter).getRelationId());
+		record.storeTableIdSchemaName(f_mon_tab_sch_name, counts.getGroupId());
+		record.storeTableIdObjectName(f_mon_tab_name, counts.getGroupId());
 		record.storeGlobalId(f_mon_tab_rec_stat_id, rec_stat_id);
 		record.write();
 
 		record.reset(rel_mon_rec_stats);
 		record.storeGlobalId(f_mon_rec_stat_id, rec_stat_id);
 		record.storeInteger(f_mon_rec_stat_group, stat_group);
-		record.storeInteger(f_mon_rec_seq_reads, (*iter)[RecordStatType::SEQ_READS]);
-		record.storeInteger(f_mon_rec_idx_reads, (*iter)[RecordStatType::IDX_READS]);
-		record.storeInteger(f_mon_rec_inserts, (*iter)[RecordStatType::INSERTS]);
-		record.storeInteger(f_mon_rec_updates, (*iter)[RecordStatType::UPDATES]);
-		record.storeInteger(f_mon_rec_deletes, (*iter)[RecordStatType::DELETES]);
-		record.storeInteger(f_mon_rec_backouts, (*iter)[RecordStatType::BACKOUTS]);
-		record.storeInteger(f_mon_rec_purges, (*iter)[RecordStatType::PURGES]);
-		record.storeInteger(f_mon_rec_expunges, (*iter)[RecordStatType::EXPUNGES]);
-		record.storeInteger(f_mon_rec_locks, (*iter)[RecordStatType::LOCKS]);
-		record.storeInteger(f_mon_rec_waits, (*iter)[RecordStatType::WAITS]);
-		record.storeInteger(f_mon_rec_conflicts, (*iter)[RecordStatType::CONFLICTS]);
-		record.storeInteger(f_mon_rec_bkver_reads, (*iter)[RecordStatType::BACK_READS]);
-		record.storeInteger(f_mon_rec_frg_reads, (*iter)[RecordStatType::FRAGMENT_READS]);
-		record.storeInteger(f_mon_rec_rpt_reads, (*iter)[RecordStatType::RPT_READS]);
-		record.storeInteger(f_mon_rec_imgc, (*iter)[RecordStatType::IMGC]);
+		record.storeInteger(f_mon_rec_seq_reads, counts[RecordStatType::SEQ_READS]);
+		record.storeInteger(f_mon_rec_idx_reads, counts[RecordStatType::IDX_READS]);
+		record.storeInteger(f_mon_rec_inserts, counts[RecordStatType::INSERTS]);
+		record.storeInteger(f_mon_rec_updates, counts[RecordStatType::UPDATES]);
+		record.storeInteger(f_mon_rec_deletes, counts[RecordStatType::DELETES]);
+		record.storeInteger(f_mon_rec_backouts, counts[RecordStatType::BACKOUTS]);
+		record.storeInteger(f_mon_rec_purges, counts[RecordStatType::PURGES]);
+		record.storeInteger(f_mon_rec_expunges, counts[RecordStatType::EXPUNGES]);
+		record.storeInteger(f_mon_rec_locks, counts[RecordStatType::LOCKS]);
+		record.storeInteger(f_mon_rec_waits, counts[RecordStatType::WAITS]);
+		record.storeInteger(f_mon_rec_conflicts, counts[RecordStatType::CONFLICTS]);
+		record.storeInteger(f_mon_rec_bkver_reads, counts[RecordStatType::BACK_READS]);
+		record.storeInteger(f_mon_rec_frg_reads, counts[RecordStatType::FRAGMENT_READS]);
+		record.storeInteger(f_mon_rec_rpt_reads, counts[RecordStatType::RPT_READS]);
+		record.storeInteger(f_mon_rec_imgc, counts[RecordStatType::IMGC]);
 		record.write();
 	}
 }
@@ -1607,8 +1611,10 @@ void Monitoring::dumpAttachment(thread_db* tdbb, Attachment* attachment, ULONG g
 	{
 		// Statement information, must be put into dump before requests
 
-		for (const auto statement : attachment->att_statements)
+		for (const auto request : attachment->att_requests)
 		{
+			const auto* statement = request->getStatement();
+
 			if (!(statement->flags & (Statement::FLAG_INTERNAL | Statement::FLAG_SYS_TRIGGER)))
 			{
 				const string plan = Optimizer::getPlan(tdbb, statement, true);

@@ -38,6 +38,8 @@
 #include "gen/autoconfig.h"
 #endif
 
+#define USE_VALGRIND
+
 // Using our debugging code is pointless when we may use Valgrind features
 #if defined(DEV_BUILD) && !defined(USE_VALGRIND)
 #define DEBUG_GDS_ALLOC

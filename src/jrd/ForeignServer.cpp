@@ -745,6 +745,9 @@ const string ForeignTableAdapter::getWhereClauseSql() const
 void ForeignTableAdapter::addTableOption(const MetaName& name, const string& value,
 	const ExternalValueType type)
 {
+	if (m_tableOptions.exist(name))
+		return;
+
 	ForeignOption* option = m_tableOptions.put(name);
 	option->m_name = name;
 	option->m_value = value;
@@ -758,7 +761,7 @@ void ForeignTableAdapter::addTableField(const MetaName& fieldName, const MetaNam
 	ForeignField* field;
 	if (!m_foreignFields.get(fieldName, field))
 	{
-		field = FB_NEW_POOL(*m_relation->rel_pool) ForeignField(*m_relation->rel_pool);
+		field = FB_NEW_POOL(m_relation->getPool()) ForeignField(m_relation->getPool());
 		field->name = fieldName;
 		m_foreignFields.put(fieldName, field);
 	}
@@ -787,7 +790,7 @@ const string ForeignTableAdapter::getOriginalTableName() const
 	if (m_tableOptions.exist(MetaName(FOREIGN_TABLE_NAME)))
 		schemaQualifiedName += m_tableOptions.get(MetaName(FOREIGN_TABLE_NAME))->m_value;
 	else
-		schemaQualifiedName += m_relation->rel_name.object.toQuotedString();
+		schemaQualifiedName += m_relation->getName().object.toQuotedString();
 
 	return schemaQualifiedName;
 }

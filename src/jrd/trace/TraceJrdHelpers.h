@@ -75,7 +75,7 @@ public:
 			fb_utils::query_performance_counter() - m_start_clock, 0);
 
 		TraceConnectionImpl conn(attachment);
-		TraceTransactionImpl tran(m_transaction, stats.getPerf(), m_prevID);
+		TraceTransactionImpl tran(m_transaction, &stats, m_prevID);
 
 		attachment->att_trace_manager->event_transaction_end(&conn, &tran, m_commit, m_retain, result);
 		m_baseline = NULL;
@@ -205,7 +205,7 @@ public:
 
 		TraceConnectionImpl conn(attachment);
 		TraceTransactionImpl tran(transaction);
-		TraceProcedureImpl proc(m_request, stats.getPerf());
+		TraceProcedureImpl proc(m_request, &stats);
 
 		const auto trace_mgr = attachment->att_trace_manager;
 		trace_mgr->event_proc_execute(&conn, &tran, &proc, false, result);
@@ -268,7 +268,7 @@ public:
 
 		TraceConnectionImpl conn(attachment);
 		TraceTransactionImpl tran(transaction);
-		TraceProcedureImpl proc(m_request, stats.getPerf());
+		TraceProcedureImpl proc(m_request, &stats);
 
 		const auto trace_mgr = attachment->att_trace_manager;
 		trace_mgr->event_proc_execute(&conn, &tran, &proc, false, result);
@@ -402,7 +402,7 @@ public:
 		TraceTransactionImpl tran(transaction);
 
 		TraceDscFromMsg inputs(m_request->getStatement()->function->getInputFormat(), m_inMsg, m_inMsgLength);
-		TraceFunctionImpl func(m_request, stats.getPerf(), inputs, value);
+		TraceFunctionImpl func(m_request, &stats, inputs, value);
 
 		const auto trace_mgr = attachment->att_trace_manager;
 		trace_mgr->event_func_execute(&conn, &tran, &func,  false, result);
@@ -437,8 +437,8 @@ public:
 		if (!m_need_trace)
 			return;
 
-		m_name = trigger->name.toQuotedString();
-		m_relationName = trigger->relation ? trigger->relation->rel_name.toQuotedString() : "";
+		m_name = trigger->getName().toQuotedString();
+		m_relationName = trigger->relation ? trigger->relation->getName().toQuotedString() : "";
 
 		const auto type = (trigger->type & ~TRIGGER_TYPE_MASK);
 
@@ -458,7 +458,7 @@ public:
 
 			case TRIGGER_TYPE_DB:
 				{
-					m_action = type + DB_TRIGGER_MAX - 1;
+					m_action = type + TRIGGER_CONNECT;
 
 					fb_assert(m_action == TRIGGER_CONNECT ||
 							  m_action == TRIGGER_DISCONNECT ||
@@ -566,7 +566,7 @@ public:
 
 		TraceConnectionImpl conn(attachment);
 		TraceTransactionImpl tran(transaction);
-		TraceTriggerImpl trig(m_which, m_request, stats.getPerf());
+		TraceTriggerImpl trig(m_which, m_request, &stats);
 
 		const auto trace_mgr = attachment->att_trace_manager;
 		trace_mgr->event_trigger_execute(&conn, &tran, &trig, false, result);
@@ -689,7 +689,7 @@ public:
 
 		TraceConnectionImpl conn(m_tdbb->getAttachment());
 		TraceTransactionImpl tran(m_tdbb->getTransaction());
-		TraceBLRStatementImpl stmt(m_request->getStatement(), stats.getPerf());
+		TraceBLRStatementImpl stmt(m_request->getStatement(), &stats);
 
 		TraceManager* trace_mgr = m_tdbb->getAttachment()->att_trace_manager;
 		trace_mgr->event_blr_execute(&conn, &tran, &stmt, result);
@@ -722,8 +722,8 @@ public:
 		m_sweep_info.update(header);
 	}
 
-	void beginSweepRelation(jrd_rel* relation);
-	void endSweepRelation(jrd_rel* relation);
+	void beginSweepRelation(const jrd_rel* relation);
+	void endSweepRelation();
 
 	void finish()
 	{

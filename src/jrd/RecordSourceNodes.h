@@ -361,8 +361,6 @@ public:
 		: TypedNode<RecordSourceNode, RecordSourceNode::TYPE_RELATION>(pool),
 		  dsqlName(pool, aDsqlName),
 		  alias(pool),
-		  relation(NULL),
-		  view(NULL),
 		  context(0)
 	{
 	}
@@ -421,10 +419,10 @@ public:
 public:
 	QualifiedName dsqlName;
 	Firebird::string alias;	// SQL alias for the relation
-	jrd_rel* relation;
+	Rsc::Rel relation;
 
 private:
-	jrd_rel* view;		// parent view for posting access
+	Rsc::Rel view;		// parent view for posting access
 
 public:
 	SSHORT context;			// user-specified context number for the relation reference
@@ -475,7 +473,7 @@ public:
 	{
 	}
 
-	virtual bool deterministic() const
+	bool deterministic(thread_db* /*tdbb*/) const override
 	{
 		return false;
 	}
@@ -511,18 +509,16 @@ public:
 			cache management policies yet, so I leave it for the other day.
 	***/
 
-	jrd_prc* procedure = nullptr;
+	SubRoutine<jrd_prc> procedure;
 	NestConst<ValueListNode> inputSources;
 	NestConst<ValueListNode> inputTargets;
 	NestConst<Firebird::ObjectsArray<MetaName>> dsqlInputArgNames;
 
 private:
 	NestConst<MessageNode> inputMessage;
-
-	jrd_rel* view = nullptr;
+	Rsc::Rel view;
 	USHORT procedureId = 0;
 	SSHORT context = 0;
-	bool isSubRoutine = false;
 };
 
 class AggregateSourceNode final : public TypedNode<RecordSourceNode, RecordSourceNode::TYPE_AGGREGATE_SOURCE>
@@ -899,8 +895,8 @@ public:
 	virtual RecordSource* compile(thread_db* tdbb, Optimizer* opt, bool innerSubStream);
 
 private:
-	void planCheck(const CompilerScratch* csb) const;
-	static void planSet(CompilerScratch* csb, PlanNode* plan);
+	void planCheck(thread_db* tdbb, const CompilerScratch* csb) const;
+	static void planSet(thread_db* tdbb, CompilerScratch* csb, PlanNode* plan);
 	RseNode* processPossibleJoins(thread_db* tdbb, CompilerScratch* csb);
 
 public:
@@ -1077,6 +1073,25 @@ public:
 
 	static constexpr char const* FUNC_NAME = "UNLIST";
 	static constexpr USHORT DEFAULT_UNLIST_TEXT_LENGTH = 32;
+
+	const char* getName() const override
+	{
+		return FUNC_NAME;
+	}
+};
+
+class GenSeriesFunctionSourceNode final : public TableValueFunctionSourceNode
+{
+public:
+	explicit GenSeriesFunctionSourceNode(MemoryPool& pool)
+		: TableValueFunctionSourceNode(pool)
+	{
+	}
+
+	RecordSource* compile(thread_db* tdbb, Optimizer* opt, bool innerSubStream) override;
+	dsql_fld* makeField(DsqlCompilerScratch* dsqlScratch) override;
+
+	static constexpr char const* FUNC_NAME = "GENERATE_SERIES";
 
 	const char* getName() const override
 	{

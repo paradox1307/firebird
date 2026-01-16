@@ -343,7 +343,7 @@ enum TriggerAction
 	TRIGGER_UPDATE = 2,
 	TRIGGER_DELETE = 3,
 	TRIGGER_CONNECT = 4,
-	TRIGGER_DISCONNECT  = 5,
+	TRIGGER_DISCONNECT = 5,
 	TRIGGER_TRANS_START = 6,
 	TRIGGER_TRANS_COMMIT = 7,
 	TRIGGER_TRANS_ROLLBACK = 8,
@@ -362,7 +362,8 @@ inline constexpr unsigned DB_TRIGGER_DISCONNECT		= 1;
 inline constexpr unsigned DB_TRIGGER_TRANS_START	= 2;
 inline constexpr unsigned DB_TRIGGER_TRANS_COMMIT	= 3;
 inline constexpr unsigned DB_TRIGGER_TRANS_ROLLBACK	= 4;
-inline constexpr unsigned DB_TRIGGER_MAX			= 5;
+inline constexpr unsigned DB_TRIGGER_DDL			= 5;
+inline constexpr unsigned DB_TRIGGERS_COUNT			= 6;
 
 static inline constexpr const char* DDL_TRIGGER_ACTION_NAMES[][2] =
 {
@@ -526,5 +527,8 @@ enum ExternalValueType
 	TYPE_ENV = 1,
 	TYPE_FILE = 2
 };
+
+// Prefix of index that's getting dropped
+inline constexpr const char* TEMP_DEPEND = "RDB$TEMP_DEPEND";
 
 #endif // JRD_CONSTANTS_H

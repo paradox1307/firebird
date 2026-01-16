@@ -798,6 +798,43 @@ void UtilInterface::encodeTimeStampTz(CheckStatusWrapper* status, ISC_TIMESTAMP_
 	}
 }
 
+void UtilInterface::convert(Firebird::CheckStatusWrapper* status,
+	unsigned sourceType, unsigned sourceScale, unsigned sourceLength, const void* source,
+	unsigned targetType, unsigned targetScale, unsigned targetLength, void* target)
+{
+	dsc sourceDesc;
+	memset(&sourceDesc, 0, sizeof(sourceDesc));
+	sourceDesc.dsc_dtype = fb_utils::sqlTypeToDscType(sourceType);
+	sourceDesc.dsc_scale = sourceScale;
+	sourceDesc.dsc_length = sourceLength;
+	if (sourceDesc.isText())
+		sourceDesc.setTextType(CS_dynamic);
+	sourceDesc.dsc_address = (UCHAR*) source;
+
+	dsc targetDesc;
+	memset(&targetDesc, 0, sizeof(targetDesc));
+	targetDesc.dsc_dtype = fb_utils::sqlTypeToDscType(targetType);
+	targetDesc.dsc_scale = targetScale;
+	targetDesc.dsc_length = targetLength;
+	if (targetDesc.isText())
+		targetDesc.setTextType(CS_dynamic);
+	targetDesc.dsc_address = static_cast<UCHAR*>(target);
+
+	try
+	{
+		CVT_move(&sourceDesc, &targetDesc, 0,
+			[](const Arg::StatusVector& status)
+			{
+				status.raise();
+			}
+		);
+	}
+	catch (const Exception& ex)
+	{
+		ex.stuffException(status);
+	}
+}
+
 ISC_DATE UtilInterface::encodeDate(unsigned year, unsigned month, unsigned day)
 {
 	tm times;
@@ -3174,6 +3211,10 @@ void setLogin(ClumpletWriter& dpb, bool spbFlag)
 	const UCHAR utf8Tag = spbFlag ? isc_spb_utf8_filename : isc_dpb_utf8_filename;
 	// username and password tags match for both SPB and DPB
 
+	// We should not use environment variables when user explicitly requested
+	// trusted authentication (trusted_auth), on network server (address_path)
+	// and when authentication block is present (auth_block). The latter
+	// typically happens only on network server but extra protection won't hurt.
 	if (!(dpb.find(trusted_auth) || dpb.find(address_path) || dpb.find(auth_block)))
 	{
 		bool utf8 = dpb.find(utf8Tag);
