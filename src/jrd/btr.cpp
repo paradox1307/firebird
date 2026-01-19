@@ -998,7 +998,7 @@ void BTR_all(thread_db* tdbb, Cached::Relation* relation, IndexDescList& idxList
 			continue;
 
 		index_desc idx;
-		if (BTR_description(tdbb, relation, root, &idx, id))
+		if (BTR_description(tdbb, relation, root, &idx, id, false))
 			idxList.add(idx);
 	}
 }
@@ -1316,7 +1316,7 @@ bool BTR_activate_index(thread_db* tdbb, Cached::Relation* relation, MetaId id)
 
 
 bool BTR_description(thread_db* tdbb, Cached::Relation* relation, const index_root_page* root, index_desc* idx,
-					 MetaId id)
+					 MetaId id, bool raise)
 {
 /**************************************
  *
@@ -1392,6 +1392,9 @@ bool BTR_description(thread_db* tdbb, Cached::Relation* relation, const index_ro
 
 	if (error)
 	{
+		if (!raise)
+			return false;
+
 		QualifiedName indexName;
 		auto* idv = relation->lookup_index(tdbb, idx->idx_id, CacheFlag::AUTOCREATE);
 		if (idv)
@@ -2588,7 +2591,7 @@ static ModifyIrtRepeatValue modifyIrtRepeat(thread_db* tdbb, index_root_page::ir
 			CCH_MARK(tdbb, window);
 			irt_desc->setDrop(TransactionNumber::next(tdbb));
 			CCH_RELEASE(tdbb, window);  // next call may try to lock irt page again
-			DropIndexNode::clearName(tdbb, relation->getId(), indexId);
+			DropIndexNode::clearFrgn(tdbb, relation->getId(), indexId);
 			return ModifyIrtRepeatValue::Relock;
 
 		case tra_dead:		// switch to normal state
@@ -7594,6 +7597,6 @@ void IndexCreateLock::makeLock(MetaId indexId)
 {
 	fb_assert(!lck);
 	lck = FB_NEW_RPT(getPool(), 0) Lock(tdbb, 0, LCK_idx_create);
-	lck->setKey((FB_UINT64(relId) << IndexPermanent::REL_ID_KEY_OFFSET) + indexId);
+	lck->setKey(IndexPermanent::makeLockId(relId, indexId));
 }
 

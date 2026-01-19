@@ -475,7 +475,12 @@ public:
 		return idp_id;
 	}
 
-	static const int REL_ID_KEY_OFFSET = 16;
+	static FB_UINT64 makeLockId(MetaId relId, MetaId indexId)
+	{
+		const int REL_ID_KEY_OFFSET = 16;
+		return (FB_UINT64(relId) << REL_ID_KEY_OFFSET) + indexId;
+	}
+
 	void releaseLock(thread_db*) { }
 
 	RelationPermanent* getRelation()
@@ -604,7 +609,6 @@ public:
 	bool isVirtual() const noexcept;
 	bool isView() const noexcept;
 	bool isReplicating(thread_db* tdbb);
-
 	bool isPageBased() const noexcept;
 
 	ObjectType getObjectType() const noexcept
@@ -972,7 +976,7 @@ template <> template <>
 inline FB_UINT64 CacheElement<IndexVersion, IndexPermanent>::makeId<RelationPermanent*>(MetaId id,
 	RelationPermanent* rel)
 {
-	return (FB_UINT64(rel->getId()) << REL_ID_KEY_OFFSET) + id;
+	return IndexPermanent::makeLockId(rel->getId(), id);
 }
 
 

@@ -490,6 +490,25 @@ static ISC_STATUS getErrorNotFound(int obj_type)
 	return err_code;
 }
 
+static ISC_STATUS getErrorNotFound(int obj_type)
+{
+	ISC_STATUS err_code = 0;
+
+	switch (obj_type)
+	{
+	case obj_procedure:
+		err_code = isc_dyn_proc_not_found;
+		break;
+	case obj_udf:
+		err_code = isc_dyn_func_not_found;
+		break;
+	default:
+		fb_assert(false);
+	}
+
+	return err_code;
+}
+
 static void raiseDatabaseInUseError(bool timeout)
 {
 	if (timeout)
@@ -3050,6 +3069,7 @@ static bool modify_field(thread_db* tdbb, SSHORT phase, DeferredWork* work, jrd_
  **************************************/
 
 	SET_TDBB(tdbb);
+
 	Jrd::Attachment* attachment = tdbb->getAttachment();
 
 	switch (phase)
@@ -3766,7 +3786,8 @@ static bool delete_rfr(thread_db* tdbb, SSHORT phase, DeferredWork* work, jrd_tr
 		// now check if there are any dependencies generated through the blr
 		// that defines the relation
 
-		auto* relation = MetadataCache::lookup_relation_id(tdbb, work->dfw_id, CacheFlag::AUTOCREATE | CacheFlag::MINISCAN);
+		auto* relation = MetadataCache::lookup_relation_id(tdbb, work->dfw_id,
+			CacheFlag::NOERASED | CacheFlag::AUTOCREATE | CacheFlag::MINISCAN);
 		if (relation)
 		{
 			check_dependencies(tdbb, relation->getName(), work->dfw_name.c_str(),
@@ -4057,10 +4078,15 @@ static bool modify_trigger(thread_db* tdbb, SSHORT phase, DeferredWork* work, jr
 	case 2:
 		return true;
 
-	case 3:
+		FOR(REQUEST_HANDLE request)
+			DEP IN RDB$DEPENDENCIES
+			WITH DEP.RDB$DEPENDED_ON_SCHEMA_NAME EQUIV NULLIF(dpdo_name.schema.c_str(), '') AND
+				 DEP.RDB$DEPENDED_ON_NAME EQ dpdo_name.object.c_str() AND
+				 DEP.RDB$DEPENDED_ON_TYPE = dpdo_type AND
+				 DEP.RDB$PACKAGE_NAME EQUIV NULLIF(dpdo_name.package.c_str(), '')
+			REDUCED TO DEP.RDB$DEPENDENT_SCHEMA_NAME, DEP.RDB$DEPENDENT_NAME, DEP.RDB$DEPENDENT_TYPE
 		{
-			bool compile = !work->findArg(dfw_arg_check_blr);
-
+			// If the found object is also being deleted, there's no dependency
 			// get rid of old dependencies, bring in the new
 			MET_delete_dependencies(tdbb, work->getQualifiedName(), obj_trigger);
 			get_trigger_dependencies(work, compile, transaction);
@@ -4173,8 +4199,9 @@ static bool modify_trigger(thread_db* tdbb, SSHORT phase, DeferredWork* work, jr
 		break;
 	}
 
-	return false;
-}
+	SLONG total = 0;
+	for (int i = 0; i < obj_type_MAX; i++)
+		total += dep_counts[i];
 
 
 static bool delete_trigger(thread_db* tdbb, SSHORT phase, DeferredWork* work, jrd_tra* transaction)

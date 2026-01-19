@@ -1698,6 +1698,11 @@ public:
 	static bool checkIdRange(thread_db* tdbb, MetaId& relId, const MetaId existingRelationId);
 	USHORT calcDbKeyLength(thread_db* tdbb);
 
+	static MetaId generateRelId(thread_db* tdbb, MetaName name);
+	static bool checkDeletedId(thread_db* tdbb, MetaId& relId);
+	static bool checkIdRange(thread_db* tdbb, MetaId& relId, const MetaId existingRelationId);
+	USHORT calcDbKeyLength(thread_db* tdbb);
+
 	static bool deleteLocalField(thread_db* tdbb, jrd_tra* transaction,
 		const QualifiedName& relationName, const MetaName& fieldName, bool silent,
 		std::function<void()> preChangeHandler = {});
@@ -1762,6 +1767,23 @@ public:
 		}
 	}
 
+	static void makeVersion(thread_db* tdbb, jrd_tra* transaction, const QualifiedName& relName);
+
+private:
+	static blb* setupTriggers(thread_db* tdbb, jrd_rel* relation, bool null_view,
+		TrigArray* triggers, blb* blob);
+	static void setupTriggerDetails(thread_db* tdbb, jrd_rel* relation, blb* blob, TrigArray* triggers,
+		const QualifiedName& trigger_name, bool null_view);
+	static void putSummaryRecord(thread_db* tdbb, blb* blob, rsr_t type, const UCHAR* data, ULONG length);
+	static void putSummaryBlob(thread_db* tdbb, blb* blob, rsr_t type, bid* blob_id, jrd_tra* transaction);
+	static bool validateTextType(thread_db* tdbb, const TemporaryField* tfb);
+	static void setupArray(thread_db* tdbb, blb* blob, const TEXT* field_name, USHORT n, TemporaryField* tfb);
+	static void getArrayDesc(thread_db* tdbb, const TEXT* field_name, Ods::InternalArrayDesc* desc);
+	static Format* makeFormat(thread_db* tdbb, jrd_tra* transaction, Cached::Relation* relation,
+		USHORT* version, TemporaryField* stack);
+	static void raiseTooManyVersionsError(const int obj_type, const QualifiedName& obj_name);
+
+public:
 	static void makeVersion(thread_db* tdbb, jrd_tra* transaction, const QualifiedName& relName);
 
 private:
@@ -2238,7 +2260,7 @@ public:
 	DropIndexNode(MemoryPool& p, const QualifiedName& aName);
 
 	static bool deleteSegmentRecords(thread_db* tdbb, jrd_tra* transaction, const QualifiedName& name);
-	static void clearName(thread_db* tdbb, MetaId relId, MetaId indexId);
+	static void clearFrgn(thread_db* tdbb, MetaId relId, MetaId indexId);
 	static void clearId(thread_db* tdbb, MetaId relId, MetaId indexId);
 
 public:

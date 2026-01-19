@@ -1002,4 +1002,3 @@ FB_IMPL_MSG(JRD, 999, genseq_stepmustbe_nonzero, -833, "42", "000", "Argument ST
 FB_IMPL_MSG(JRD, 1000, argmustbe_exact_function, -833, "42", "000", "Arguments for @1 function must be exact numeric types")
 FB_IMPL_MSG(JRD, 1001, foreign_server, -901, "42", "000", "foreign server @1")
 FB_IMPL_MSG(JRD, 1002, foreign_provider_not_found, -901, "42", "000", "Foreign provider '@1' for server '@2' not found")
-

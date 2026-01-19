@@ -133,6 +133,7 @@ class dsql_dbb;
 class PreparedStatement;
 class TraceManager;
 class MessageNode;
+class Database;
 class ForeignServer;
 class ForeignTableAdapter;
 
