@@ -455,9 +455,14 @@ void ForeignTableScan::processArgument(thread_db* tdbb, string& conjunctSql, con
 		string value;
 
 		getDescString(tdbb, desc, value, getServerCharset(tdbb));
-		appendFilterValue("'", conjunctSql);
-		appendFilterValue(value, conjunctSql);
-		appendFilterValue("'", conjunctSql);
+		if (desc->isNumeric())
+			appendFilterValue(value, conjunctSql);
+		else
+		{
+			appendFilterValue("'", conjunctSql);
+			appendFilterValue(value, conjunctSql);
+			appendFilterValue("'", conjunctSql);
+		}
 	}
 	else if (const auto parameterNode = nodeAs<ParameterNode>(node))
 	{
