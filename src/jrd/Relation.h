@@ -1061,7 +1061,7 @@ inline FB_UINT64 CacheElement<IndexVersion, IndexPermanent>::makeId<RelationPerm
 template <> template <>
 inline FB_UINT64 CacheElement<jrd_rel, RelationPermanent>::makeId<NoData>(MetaId id, NoData)
 {
-	return id < 128 ? NO_METALOCK : id;
+	return id < USER_DEF_REL_INIT_ID ? NO_METALOCK : id;
 }
 
 
