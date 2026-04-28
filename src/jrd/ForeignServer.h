@@ -155,7 +155,7 @@ namespace Jrd
 	public:
 		void openInternal(thread_db* tdbb, EDS::IscTransaction* transaction);
 		void executeInternal(thread_db* tdbb, EDS::IscTransaction* transaction, record_param* org_rpb,
-			record_param* new_rpb, const Firebird::SortedArray<int>* skippedOrgRpb = nullptr,
+			record_param* new_rpb, bool usePrimaryKeys, const Firebird::SortedArray<int>* skippedOrgRpb = nullptr,
 			const Firebird::SortedArray<int>* skippedNewRpb = nullptr);
 		bool fetchInternal(thread_db* tdbb, Record* record);
 

@@ -37,11 +37,6 @@
 using namespace Firebird;
 using namespace Jrd;
 
-// It's necessary to specify old parameters twice,
-// because each parameter is set twice in the condition
-// '(<field> = <param> or (<field> is null or <param> is null))'.
-const USHORT OLD_PARAMS_MULTIPLIER = 2;
-
 namespace Jrd
 {
 
@@ -279,7 +274,8 @@ void ForeignTableStatement::openInternal(thread_db* tdbb, EDS::IscTransaction* t
 }
 
 void ForeignTableStatement::executeInternal(thread_db* tdbb, EDS::IscTransaction* transaction, record_param* org_rpb,
-	record_param* new_rpb, const SortedArray<int>* skippedOrgRpb, const SortedArray<int>* skippedNewRpb)
+	record_param* new_rpb, bool usePrimaryKeys, const SortedArray<int>* skippedOrgRpb,
+	const SortedArray<int>* skippedNewRpb)
 {
 	fb_assert(isAllocated() && !m_stmt_selectable);
 	fb_assert(!m_active);
@@ -288,9 +284,12 @@ void ForeignTableStatement::executeInternal(thread_db* tdbb, EDS::IscTransaction
 
 	// If the foreign provider didn't return the input parameters metadata,
 	// let's create it from the record descriptors
-	if (m_connection.testFeature(fb_feature_internal_input_types))
+	const ForeignTableConnection* foreignConnection = static_cast<ForeignTableConnection*>(getConnection());
+	const bool useEquiv = foreignConnection->testSqlFeature(fb_feature_sql_op_equiv);
+	const USHORT multiplier = (usePrimaryKeys || useEquiv) ? 1 : 2;
+	if (foreignConnection->testFeature(fb_feature_internal_input_types))
 	{
-		auto count = 0;
+		USHORT count = 0;
 
 		if (new_rpb)
 		{
@@ -302,7 +301,7 @@ void ForeignTableStatement::executeInternal(thread_db* tdbb, EDS::IscTransaction
 		{
 			count += org_rpb->rpb_record->getFormat()->fmt_count;
 			if (skippedOrgRpb && skippedOrgRpb->getCount() > 0)
-				count -= skippedOrgRpb->getCount() * OLD_PARAMS_MULTIPLIER;
+				count -= skippedOrgRpb->getCount() * multiplier;
 		}
 
 		DescList sqldaDescs(count);
@@ -311,7 +310,7 @@ void ForeignTableStatement::executeInternal(thread_db* tdbb, EDS::IscTransaction
 			addRecordDescs(sqldaDescs, new_rpb->rpb_record, skippedNewRpb);
 
 		if (org_rpb)
-			addRecordDescs(sqldaDescs, org_rpb->rpb_record, skippedOrgRpb, OLD_PARAMS_MULTIPLIER);
+			addRecordDescs(sqldaDescs, org_rpb->rpb_record, skippedOrgRpb, multiplier);
 
 		remakeInputSQLDA(tdbb, sqldaDescs.getCount(), sqldaDescs.begin());
 	}
@@ -332,7 +331,7 @@ void ForeignTableStatement::executeInternal(thread_db* tdbb, EDS::IscTransaction
 				offset -= skippedNewRpb->getCount();
 		}
 		// The old value should be set after new ones (if they exist).
-		setInParamsInternal(tdbb, org_rpb, offset, skippedOrgRpb, OLD_PARAMS_MULTIPLIER);
+		setInParamsInternal(tdbb, org_rpb, offset, skippedOrgRpb, multiplier);
 	}
 
 	doExecute(tdbb);
@@ -546,7 +545,11 @@ void ForeignTableAdapter::execute(thread_db* tdbb, EDS::Statement* statement, re
 	if (ftStatement->isSelectable())
 		ftStatement->openInternal(tdbb, transaction);
 	else
-		ftStatement->executeInternal(tdbb, transaction, org_rpb, new_rpb, &m_skippedOrgRpbIdx, &m_skippedNewRpbIdx);
+	{
+		const bool usePrimaryKeys = m_foreignPKNames.hasData();
+		ftStatement->executeInternal(tdbb, transaction, org_rpb, new_rpb, usePrimaryKeys, &m_skippedOrgRpbIdx,
+			&m_skippedNewRpbIdx);
+	}
 }
 
 bool ForeignTableAdapter::fetch(thread_db* tdbb, EDS::Statement* statement, Record* record)
@@ -702,7 +705,7 @@ const string ForeignTableAdapter::getWhereClauseSql() const
 
 	string where = " where 1 = 1 ";
 
-	const FB_BOOLEAN useKeys = m_foreignPKNames.getCount() > 0;
+	const FB_BOOLEAN usePrimaryKeys = m_foreignPKNames.hasData();
 
 	for (const vec<jrd_fld*>::const_iterator end = vector->end();
 		fieldIter < end;
@@ -712,16 +715,32 @@ const string ForeignTableAdapter::getWhereClauseSql() const
 		{
 			jrd_fld* field = *fieldIter;
 			const MetaName name = field->fld_name;
-			if (!useKeys || m_foreignPKNames.exist(name))
+			const bool isPrimaryKey = m_foreignPKNames.exist(name);
+			if (!usePrimaryKeys || isPrimaryKey)
 			{
 				if (!m_skippedOrgRpbIdx.exist(id))
 				{
 					const string origName = getOriginalFieldName(field->fld_name);
-					where += " and (";
-					where += origName;
-					where += " = ? or (";
-					where += origName;
-					where += " is null and ? is null)) ";
+					if (isPrimaryKey)
+					{
+						where += " and (";
+						where += origName;
+						where += " = ?) ";
+					}
+					else if(m_connection->testSqlFeature(fb_feature_sql_op_equiv))
+					{
+						where += " and (";
+						where += origName;
+						where += " is not distinct from ?) ";
+					}
+					else
+					{
+						where += " and (";
+						where += origName;
+						where += " = ? or (";
+						where += origName;
+						where += " is null and ? is null)) ";
+					}
 				}
 			}
 		}
@@ -809,7 +828,7 @@ void ForeignTableAdapter::processRecord(SortedArray<int>& outSkippedRpbIdx, reco
 	vec<jrd_fld*>* vector = m_relation->rel_fields;
 	vec<jrd_fld*>::iterator fieldIter = vector->begin();
 	SSHORT id = 0;
-	const FB_BOOLEAN useKeys = m_foreignPKNames.getCount() > 0;
+	const FB_BOOLEAN usePrimaryKeys = m_foreignPKNames.hasData();
 
 	for (const vec<jrd_fld*>::const_iterator end = vector->end();
 		fieldIter < end;
@@ -828,7 +847,7 @@ void ForeignTableAdapter::processRecord(SortedArray<int>& outSkippedRpbIdx, reco
 			}
 			else
 			{
-				if (!useKeys || m_foreignPKNames.exist(field->fld_name))
+				if (!usePrimaryKeys || m_foreignPKNames.exist(field->fld_name))
 				{
 					const Jrd::Format* format = nullptr;
 					if (rpb)
