@@ -13273,6 +13273,12 @@ ModifyIndexNode* CreateIndexNode::store(thread_db* tdbb, MemoryPool& p, jrd_tra*
 				// msg 181: "attempt to index a view"
 				status_exception::raise(Arg::PrivateDyn(181));
 			}
+
+			if (!VREL.RDB$FOREIGN_SERVER_NAME.NULL)
+			{
+				// msg 181: "attempt to index a foreign table"
+				status_exception::raise(Arg::PrivateDyn(328));
+			}
 		}
 		END_FOR
 

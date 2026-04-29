@@ -317,3 +317,4 @@ FB_IMPL_MSG(DYN, 324, dyn_foreign_server_not_found, -901, "42", "000", "Foreign 
 FB_IMPL_MSG(DYN, 325, dyn_user_mapping_not_found, -901, "42", "000", "User mapping for user @1 and server @2 not found")
 FB_IMPL_MSG(DYN, 326, dyn_foreign_server_already_exists, -901, "42", "000", "Foreign server @1 already exists")
 FB_IMPL_MSG(DYN, 327, dyn_foreign_server_not_exist, -901, "42", "000", "Foreign server @1 does not exist")
+FB_IMPL_MSG_NO_SYMBOL(DYN, 328, "attempt to index a foreign table")
