@@ -10188,7 +10188,7 @@ void AlterRelationNode::execute(thread_db* tdbb, DsqlCompilerScratch* dsqlScratc
 						for (unsigned cnt = 0; cnt < clause->options.getCount(); ++cnt)
 						{
 							const Option* option = &clause->options[cnt];
-							AutoCacheRequest request(tdbb, drq_drop_f_tbl_opt, DYN_REQUESTS);
+							AutoCacheRequest request(tdbb, drq_drop_f_tbl_f_opt, DYN_REQUESTS);
 
 							FOR (REQUEST_HANDLE request TRANSACTION_HANDLE transaction)
 								FTFOPT IN RDB$FOREIGN_TABLE_FIELD_OPTIONS
